@@ -1,0 +1,38 @@
+# Generated outputs — never committed
+results/
+*.png
+*.csv
+
+# IVSI compiled artifacts (server-side binaries)
+pythonGateways/
+FabricServer
+*.so
+*.o
+
+# IVSI generated C++ source
+*.cxx
+SyscVpiTimeStub*
+XlTlmEthSoftSw*
+VsiCommonPythonApi*
+VsiTcpUdpPythonGateway*
+
+# IVSI runtime socket files
+dconn-*
+vsiInputFifo
+vsiOutputFifo
+vsiInterruptFifo
+
+# IVSI log files
+fab.log
+sim.log
+ctrl.log
+viz.log
+check.*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.swp
+.DS_Store

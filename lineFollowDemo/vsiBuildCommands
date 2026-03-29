@@ -1,0 +1,127 @@
+## ============================================================
+## vsiBuildCommands
+## ============================================================
+## Author  : Abdalah
+## Course  : Siemens Digital Twin Technologies — Spring 2026
+## Project : Line-Following Robot with PID Control
+##
+## This file declares the three-client IVSI topology.
+## Run with:  vsiBuild --cmdFile vsiBuildCommands
+##
+## Three clients communicate over a virtual Ethernet backplane
+## using the python2DtEthernet gateway:
+##
+##   Client 1 — PlantSimulation  (IP: 192.168.1.2)
+##     Simulates robot kinematics, adds sensor noise,
+##     publishes pose and path reference every timestep.
+##
+##   Client 2 — controller  (IP: 192.168.1.1)
+##     Runs PID control law, computes lateral and heading
+##     error, outputs velocity commands every timestep.
+##
+##   Client 3 — visualizer  (IP: 192.168.1.3)
+##     Subscriber only — logs all signals, computes KPIs,
+##     saves plots and CSV at end of simulation.
+## ============================================================
+
+
+## ── Client 1: Plant Simulation ───────────────────────────────────────────
+add component -type Python -name PlantSimulation
+add port      -componentName PlantSimulation -name PlantSimulation \
+              -gateway python2DtEthernet
+config port   -componentName PlantSimulation -portName PlantSimulation \
+              -macAddress 12:34:56:78:9A:BA -ipAddress 192.168.1.2
+
+## TCP sockets
+add portSocket -componentName PlantSimulation -portName PlantSimulation \
+               -ipPortNum 8070 -socketType server -protocol tcpIp
+add portSocket -componentName PlantSimulation -portName PlantSimulation \
+               -ipPortNum 8071 -socketType server -protocol tcpIp
+
+## Signal definitions
+define componentSignals -componentName PlantSimulation \
+    -signals "[pose_x:double:output, pose_y:double:output, theta:double:output, \
+               ref_x:double:output,  ref_y:double:output,  ref_theta:double:output, \
+               v_cmd:double:input,   w_cmd:double:input]"
+
+
+## ── Client 2: PID Controller ─────────────────────────────────────────────
+add component -type Python -name controller
+add port      -componentName controller -name controller \
+              -gateway python2DtEthernet
+config port   -componentName controller -portName controller \
+              -macAddress 12:34:56:78:9A:BC -ipAddress 192.168.1.1
+
+## TCP sockets
+add portSocket -componentName controller -portName controller \
+               -ipPortNum 8070 -socketType client -protocol tcpIp
+add portSocket -componentName controller -portName controller \
+               -ipPortNum 8072 -socketType server -protocol tcpIp
+
+## Signal definitions
+define componentSignals -componentName controller \
+    -signals "[pose_x:double:input,   pose_y:double:input,   theta:double:input, \
+               ref_x:double:input,    ref_y:double:input,    ref_theta:double:input, \
+               v_cmd:double:output,   w_cmd:double:output, \
+               lateral_error:double:output, heading_error:double:output]"
+
+
+## ── Client 3: Visualizer / Logger ────────────────────────────────────────
+add component -type Python -name visualizer
+add port      -componentName visualizer -name visualizer \
+              -gateway python2DtEthernet
+config port   -componentName visualizer -portName visualizer \
+              -macAddress 12:34:56:78:9A:BB -ipAddress 192.168.1.3
+
+## TCP sockets  (client only — visualizer never sends data)
+add portSocket -componentName visualizer -portName visualizer \
+               -ipPortNum 8071 -socketType client -protocol tcpIp
+add portSocket -componentName visualizer -portName visualizer \
+               -ipPortNum 8072 -socketType client -protocol tcpIp
+
+## Signal definitions
+define componentSignals -componentName visualizer \
+    -signals "[pose_x:double:input,   pose_y:double:input,   theta:double:input, \
+               ref_x:double:input,    ref_y:double:input,    ref_theta:double:input, \
+               v_cmd:double:input,    w_cmd:double:input, \
+               lateral_error:double:input, heading_error:double:input]"
+
+
+## ── Signal connections ────────────────────────────────────────────────────
+
+## PlantSimulation → controller
+connect signals -sourceSignal PlantSimulation.pose_x    -destSignal controller.pose_x    -sourcePortName PlantSimulation -destPortName controller
+connect signals -sourceSignal PlantSimulation.pose_y    -destSignal controller.pose_y    -sourcePortName PlantSimulation -destPortName controller
+connect signals -sourceSignal PlantSimulation.theta     -destSignal controller.theta     -sourcePortName PlantSimulation -destPortName controller
+connect signals -sourceSignal PlantSimulation.ref_x     -destSignal controller.ref_x     -sourcePortName PlantSimulation -destPortName controller
+connect signals -sourceSignal PlantSimulation.ref_y     -destSignal controller.ref_y     -sourcePortName PlantSimulation -destPortName controller
+connect signals -sourceSignal PlantSimulation.ref_theta -destSignal controller.ref_theta -sourcePortName PlantSimulation -destPortName controller
+
+## controller → PlantSimulation
+connect signals -sourceSignal controller.v_cmd -destSignal PlantSimulation.v_cmd -sourcePortName controller -destPortName PlantSimulation
+connect signals -sourceSignal controller.w_cmd -destSignal PlantSimulation.w_cmd -sourcePortName controller -destPortName PlantSimulation
+
+## PlantSimulation → visualizer
+connect signals -sourceSignal PlantSimulation.pose_x    -destSignal visualizer.pose_x    -sourcePortName PlantSimulation -destPortName visualizer
+connect signals -sourceSignal PlantSimulation.pose_y    -destSignal visualizer.pose_y    -sourcePortName PlantSimulation -destPortName visualizer
+connect signals -sourceSignal PlantSimulation.theta     -destSignal visualizer.theta     -sourcePortName PlantSimulation -destPortName visualizer
+connect signals -sourceSignal PlantSimulation.ref_x     -destSignal visualizer.ref_x     -sourcePortName PlantSimulation -destPortName visualizer
+connect signals -sourceSignal PlantSimulation.ref_y     -destSignal visualizer.ref_y     -sourcePortName PlantSimulation -destPortName visualizer
+connect signals -sourceSignal PlantSimulation.ref_theta -destSignal visualizer.ref_theta -sourcePortName PlantSimulation -destPortName visualizer
+
+## controller → visualizer
+connect signals -sourceSignal controller.v_cmd         -destSignal visualizer.v_cmd         -sourcePortName controller -destPortName visualizer
+connect signals -sourceSignal controller.w_cmd         -destSignal visualizer.w_cmd         -sourcePortName controller -destPortName visualizer
+connect signals -sourceSignal controller.lateral_error -destSignal visualizer.lateral_error -sourcePortName controller -destPortName visualizer
+connect signals -sourceSignal controller.heading_error -destSignal visualizer.heading_error -sourcePortName controller -destPortName visualizer
+
+
+## ── Simulation parameters ─────────────────────────────────────────────────
+set totalSimTime    70 s
+set simulationStep  0.01 s
+set workspaceDir    .
+set digitalTwinName lineFollowDemo
+
+
+## ── Generate all client skeletons and FabricServer ───────────────────────
+generate
